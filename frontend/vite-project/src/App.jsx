@@ -8,7 +8,7 @@ import Dashboard from './pages/Dashboard';
 import Bills from './pages/Bills';
 import Residents from './pages/Residents';
 import Houses from './pages/Houses'; 
-import LoginWarga from './pages/warga/loginWarga'; // Pastikan nama file/folder benar (case sensitive)
+import LoginWarga from './pages/warga/LoginWarga'; 
 import DashboardWarga from './pages/warga/DashboardWarga';
 import BankSimulator from './pages/BankSimulator';
 import Finance from './pages/Finance';

@@ -1,300 +1,298 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, CheckCircle, AlertCircle, X } from 'lucide-react';
+import { Printer, Edit, Trash2, Plus, Search, AlertCircle, CheckCircle, X } from 'lucide-react';
 
 export default function Bills() {
-  const [bills, setBills] = useState([]);
-  const [categories, setCategories] = useState([]); // <--- STATE BARU UTK KATEGORI
-  const [isLoading, setIsLoading] = useState(true);
+  const [tagihanList, setTagihanList] = useState([]);
+  const [categories, setCategories] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
   
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [generateForm, setGenerateForm] = useState({
-    bulan: new Date().getMonth() + 1,
-    tahun: new Date().getFullYear(),
-    jumlah: 150000,
-    id_kategori: '' // <--- STATE BARU
+  // STATE UNTUK MODAL GENERATE
+  const [showModal, setShowModal] = useState(false);
+  const [formData, setFormData] = useState({
+    nama_periode: '',
+    bulan: new Date().getMonth() + 1, // Default bulan ini
+    tahun: new Date().getFullYear(),  // Default tahun ini
+    jumlah_tagihan: '',
+    id_kategori: 1
   });
+  const [loadingGen, setLoadingGen] = useState(false);
 
-  // 1. FETCH DATA (TAGIHAN + KATEGORI)
+  // 1. Fetch Data Awal
   useEffect(() => {
-    fetchData();
+    fetchTagihan();
+    fetchCategories();
   }, []);
 
-  const fetchData = async () => {
-    setIsLoading(true);
+  const fetchTagihan = async () => {
     try {
-      // Panggil 2 API sekaligus
-      const [resBills, resCats] = await Promise.all([
-        fetch('http://localhost:3000/api/tagihan'),
-        fetch('http://localhost:3000/api/tagihan/categories') // <--- Route baru
-      ]);
-
-      const dataBills = await resBills.json();
-      const dataCats = await resCats.json();
-
-      if (resBills.ok) setBills(Array.isArray(dataBills) ? dataBills : []);
-      
-      if (resCats.ok && Array.isArray(dataCats)) {
-        setCategories(dataCats);
-        // Otomatis pilih kategori pertama sebagai default
-        if (dataCats.length > 0) {
-          setGenerateForm(prev => ({ ...prev, id_kategori: dataCats[0].id }));
-        }
-      }
-
+      const response = await fetch('http://localhost:3000/api/tagihan');
+      const data = await response.json();
+      setTagihanList(Array.isArray(data) ? data : []);
     } catch (error) {
-      console.error("Error:", error);
+      console.error("Gagal load tagihan:", error);
+      setTagihanList([]);
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
   };
 
-const handleGenerate = async (e) => {
+  const fetchCategories = async () => {
+    try {
+      const res = await fetch('http://localhost:3000/api/tagihan/categories'); // Pastikan route ini ada
+      const data = await res.json();
+      setCategories(Array.isArray(data) ? data : []);
+    } catch {
+      console.log("Gagal load kategori, pakai default.");
+    }
+  };
+
+  // 2. Logic Generate Tagihan (Fitur Lama Dikembalikan)
+  const handleGenerate = async (e) => {
     e.preventDefault();
-    
-    // 1. Validasi Ketersediaan Data
-    if (!categories || categories.length === 0) {
-        alert("Data Kategori belum siap (masih loading). Tunggu sebentar...");
-        return;
-    }
-
-    if (!generateForm.id_kategori) {
-        alert("Pilih Jenis Tagihan dulu!");
-        return;
-    }
-
-    // 2. LOGIKA STRUKTURAL: Cari Data yang Cocok
-    // Kita gunakan String() agar "1" (String) cocok dengan 1 (Number)
-    const selectedCat = categories.find(c => String(c.id) === String(generateForm.id_kategori));
-
-    // 3. VALIDASI KRITIS (Cegah "Undefined")
-    if (!selectedCat) {
-        // Jika ID dipilih tapi datanya ga ketemu -> ERROR
-        alert(`Error Sistem: Kategori dengan ID ${generateForm.id_kategori} tidak ditemukan di database.`);
-        return; 
-    }
-
-    // 4. SMART PROPERTY DETECTION (Solusi Inti)
-    // Cek satu-satu: Apakah namanya tersimpan di kolom 'nama_kategori'? Atau 'nama'? Atau 'jenis'?
-    const realName = selectedCat.nama_kategori || selectedCat.nama || selectedCat.jenis || selectedCat.title;
-
-    if (!realName) {
-        // Jika datanya ketemu TAPI namanya kosong/null
-        alert("Data Kategori ditemukan, tapi kolom Namanya kosong/salah. Cek Database!");
-        console.log("Objek Kategori Bermasalah:", selectedCat);
-        return;
-    }
-
-    // 5. Susun Nama Periode (Sudah Pasti Aman)
-    const namaBulan = new Date(generateForm.tahun, generateForm.bulan - 1).toLocaleString('id-ID', { month: 'long' });
-    const namaPeriode = `${realName} - ${namaBulan} ${generateForm.tahun}`;
-
-    // -------------------------------------------------------------
-
-    if(!window.confirm(`Yakin generate tagihan: ${namaPeriode}?`)) return;
+    setLoadingGen(true);
 
     try {
-      const response = await fetch('http://localhost:3000/api/tagihan/generate', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            nama_periode: namaPeriode, 
-            bulan: generateForm.bulan,
-            tahun: generateForm.tahun,
-            jumlah_tagihan: generateForm.jumlah,
-            id_kategori: generateForm.id_kategori 
-          }),
-      });
-
-      const result = await response.json();
-
-      if(response.ok) {
-        alert(result.message);
-        setIsModalOpen(false);
-        fetchData(); 
-      } else {
-        alert("Gagal: " + result.error);
-      }
-    } catch (error) {
-      console.error(error);
-      alert("Error koneksi server.");
-    }
-  };
-
-  // Fungsi untuk memproses pembayaran
-  const handlePay = async (id, namaWarga) => {
-    // Tanya user metode bayar (Simpel dulu pakai prompt browser)
-    const metode = window.prompt(`Konfirmasi pembayaran untuk ${namaWarga}?\nKetik metode bayar (Tunai/Transfer):`, "Tunai");
-    
-    if (metode === null) return; // Kalau cancel
-
-    try {
-      const res = await fetch('http://localhost:3000/api/pembayaran', {
+      const res = await fetch('http://localhost:3000/api/tagihan/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id_tagihan: id,
-          metode_bayar: metode
-        })
+        body: JSON.stringify(formData)
       });
-
+      
       const result = await res.json();
+      
       if (res.ok) {
-        alert(result.message);
-        fetchData(); // Refresh data agar status jadi Lunas
+        alert(result.message); // Munculkan pesan sukses dari backend
+        setShowModal(false);   // Tutup modal
+        fetchTagihan();        // Refresh tabel
       } else {
         alert("Gagal: " + result.error);
       }
     } catch {
-      alert("Error koneksi server");
+      alert("Terjadi kesalahan sistem");
+    } finally {
+      setLoadingGen(false);
     }
   };
+
+  // 3. Helper Format
+  const formatRp = (num) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(num);
+  
+  const formatTanggal = (dateString) => {
+    if (!dateString) return "-";
+    const date = new Date(dateString);
+    return isNaN(date.getTime()) ? "-" : date.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
+  };
+
+  // 4. Logic Filter Data
+  const safeList = Array.isArray(tagihanList) ? tagihanList : [];
+  const filteredData = safeList.filter(item => 
+    (item.nama_warga?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
+    (item.status?.toLowerCase() || '').includes(searchTerm.toLowerCase())
+  );
+
   return (
-    <div className="space-y-6">
-      <div className="flex justify-end gap-2">
+    <div className="p-6 bg-slate-50 min-h-screen">
+      
+      {/* Header */}
+      <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-800">Manajemen Tagihan</h1>
+          <p className="text-slate-500 text-sm">Kelola, generate, dan cetak tagihan warga</p>
+        </div>
+        <div className="flex gap-2 w-full md:w-auto">
+           <div className="relative flex-1 md:flex-none">
+              <Search className="absolute left-3 top-2.5 text-slate-400" size={20} />
+              <input 
+                type="text" 
+                placeholder="Cari warga..." 
+                className="pl-10 pr-4 py-2 border rounded-lg w-full focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                value={searchTerm}
+                onChange={e => setSearchTerm(e.target.value)}
+              />
+           </div>
+           {/* TOMBOL PEMICU MODAL */}
            <button 
-             onClick={() => setIsModalOpen(true)}
-             className="bg-indigo-600 text-white px-5 py-2.5 rounded-lg text-sm font-medium hover:bg-indigo-700 flex items-center gap-2 shadow-lg shadow-indigo-200"
+             onClick={() => setShowModal(true)} 
+             className="bg-indigo-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-indigo-700 whitespace-nowrap"
            >
-             <Plus size={16}/> Generate Tagihan
+             <Plus size={20} /> Buat Tagihan
            </button>
+        </div>
       </div>
 
-      {/* Tabel Tagihan */}
-      <div className="bg-white border border-slate-100 rounded-2xl shadow-sm overflow-hidden">
-        <table className="w-full text-left">
-          <thead className="bg-slate-50 text-xs uppercase text-slate-500 font-semibold">
-            <tr>
-              <th className="px-6 py-4">Rumah & Warga</th>
-              <th className="px-6 py-4">Periode</th>
-              <th className="px-6 py-4">Nominal</th>
-              <th className="px-6 py-4">Virtual Account</th>
-              <th className="px-6 py-4">Status</th>
-              
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {isLoading ? (
-               <tr><td colSpan="4" className="text-center py-8 text-slate-400">Memuat data...</td></tr>
-            ) : bills.length === 0 ? (
-               <tr><td colSpan="4" className="text-center py-8 text-slate-400">Belum ada tagihan. Silakan Generate.</td></tr>
-            ) : (
-              bills.map((bill) => (
-                <tr key={bill.id} className="hover:bg-slate-50 transition">
-                  <td className="px-6 py-4">
-                    <div className="font-bold text-slate-800">{bill.blok_rumah}-{bill.no_rumah}</div>
-                    <div className="text-xs text-slate-500">{bill.nama_penghuni || 'Tanpa Nama'}</div>
-                  </td>
-                  <td className="px-6 py-4 text-sm text-slate-600">
-                    <span className="bg-slate-100 px-2 py-1 rounded text-slate-600 font-medium">{bill.nama_periode}</span>
-                  </td>
-                  <td className="px-6 py-4 font-medium text-slate-800">
-                    Rp {Number(bill.jumlah).toLocaleString('id-ID')}
-                  </td>
-                  
-                  <td className="px-6 py-4 font-mono text-slate-500 text-sm font-bold">
-        {bill.nomor_va || '-'}
-      </td>
-                  <td className="px-6 py-4">
-                   {bill.status === 'Lunas' ? (
-                      // Lunas : Tampilkan Label Lunas
-                      <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1 w-fit">
-                        <CheckCircle size={12}/> Lunas
-                      </span>
-                    ) : (
-                      // JIKA BELUM BAYAR: Tampilkan Tombol Bayar
-                      <button 
-                        onClick={() => handlePay(bill.id, bill.nama_penghuni)}
-                        className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-1.5 rounded-lg text-xs font-bold transition shadow-md shadow-indigo-200"
-                      >
-                        <AlertCircle size={12}/> Atur Tagihan
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+      {/* Tabel Data */}
+      <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-sm">
+            <thead className="bg-slate-50 text-slate-600 font-bold border-b">
+              <tr>
+                <th className="p-4">Warga / Rumah</th>
+                <th className="p-4">Periode</th>
+                <th className="p-4">Jatuh Tempo</th>
+                <th className="p-4">Total Tagihan</th>
+                <th className="p-4">Terbayar</th>
+                <th className="p-4 text-center">Status</th>
+                <th className="p-4 text-center">Aksi</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {loading ? (
+                <tr><td colSpan="7" className="p-8 text-center text-slate-400">Memuat data...</td></tr>
+              ) : filteredData.length === 0 ? (
+                <tr><td colSpan="7" className="p-8 text-center text-slate-400">Belum ada data tagihan.</td></tr>
+              ) : (
+                filteredData.map((item, index) => (
+                  <tr key={index} className="hover:bg-slate-50 transition">
+                    <td className="p-4">
+                        <div className="font-bold text-slate-800">{item.nama_warga}</div>
+                        <div className="text-xs text-slate-500">{item.blok_rumah} No. {item.no_rumah}</div>
+                    </td>
+                    <td className="p-4">
+                        <span className="bg-indigo-50 text-indigo-700 px-2 py-1 rounded text-xs font-bold">
+                            {item.bulan} {item.tahun}
+                        </span>
+                    </td>
+                    <td className="p-4 text-slate-600">
+                        {item.jatuh_tempo ? formatTanggal(item.jatuh_tempo) : '-'}
+                    </td>
+                    <td className="p-4 font-bold text-slate-700">
+                        {formatRp(item.jumlah)}
+                    </td>
+                    <td className="p-4">
+                        <div className="text-slate-700">{formatRp(item.jumlah_terbayar || 0)}</div>
+                        <div className="text-xs text-slate-400">
+                           Sisa: {formatRp(item.jumlah - (item.jumlah_terbayar || 0))}
+                        </div>
+                    </td>
+                    <td className="p-4 text-center">
+                        {item.status === 'Lunas' ? (
+                            <span className="inline-flex items-center gap-1 bg-emerald-100 text-emerald-700 px-3 py-1 rounded-full text-xs font-bold">
+                                <CheckCircle size={12} /> Lunas
+                            </span>
+                        ) : item.jumlah_terbayar > 0 ? (
+                            <span className="inline-flex items-center gap-1 bg-orange-100 text-orange-700 px-3 py-1 rounded-full text-xs font-bold">
+                                <AlertCircle size={12} /> Cicilan
+                            </span>
+                        ) : (
+                            <span className="inline-flex items-center gap-1 bg-rose-100 text-rose-700 px-3 py-1 rounded-full text-xs font-bold">
+                                <AlertCircle size={12} /> Belum
+                            </span>
+                        )}
+                    </td>
+                    <td className="p-4 text-center">
+                        <div className="flex justify-center gap-2">
+                           <button className="p-2 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded transition">
+                             <Printer size={18} />
+                           </button>
+                           <button className="p-2 text-slate-500 hover:text-orange-500 hover:bg-orange-50 rounded transition">
+                             <Edit size={18} />
+                           </button>
+                           <button className="p-2 text-slate-500 hover:text-rose-500 hover:bg-rose-50 rounded transition">
+                             <Trash2 size={18} />
+                           </button>
+                        </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
-      {isModalOpen && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl w-full max-w-sm p-6 shadow-2xl">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="font-bold text-lg">Generate Tagihan</h3>
-              <button onClick={() => setIsModalOpen(false)}><X size={20} className="text-slate-400"/></button>
-            </div>
+      {/* --- MODAL GENERATE TAGIHAN (POPUP) --- */}
+      {showModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl w-full max-w-md p-6 shadow-xl relative animate-in fade-in zoom-in duration-200">
+            
+            <button 
+              onClick={() => setShowModal(false)}
+              className="absolute top-4 right-4 text-slate-400 hover:text-slate-600"
+            >
+              <X size={24} />
+            </button>
+
+            <h2 className="text-xl font-bold text-slate-800 mb-4">Generate Tagihan Baru</h2>
             
             <form onSubmit={handleGenerate} className="space-y-4">
               
-             <div>
-                <label className="block text-xs font-bold text-slate-500 mb-1">Jenis Tagihan</label>
-                
-                <div className="w-full border p-2 rounded-lg bg-slate-100 text-slate-600 font-medium cursor-not-allowed flex items-center justify-between">
-                  
-                  {/* LOGIKA DINAMIS: Cek segala kemungkinan nama kolom */}
-                  <span className="truncate">
-                    {categories.length > 0 
-                      ? (
-                          categories[0].nama_kategori ||  // Coba cari kolom 'nama_kategori'
-                          categories[0].nama ||           // Jika gak ada, coba cari 'nama'
-                          categories[0].jenis ||          // Jika gak ada, coba cari 'jenis'
-                          categories[0].title ||          // Jika gak ada, coba cari 'title'
-                          'IPL (Tanpa Nama)'              // Menyerah, pakai default
-                        ) 
-                      : 'Memuat data...'}                 {/* Tampil saat loading */}
-                  </span>
-                  
-                  <span className="text-xs bg-slate-200 px-2 py-0.5 rounded text-slate-500 whitespace-nowrap ml-2">
-                    Default
-                  </span>
-                </div>
-
-                {/* Debugging (Opsional: Hapus baris ini nanti) */}
-                {/* <pre className="text-[10px] text-red-500">{JSON.stringify(categories[0])}</pre> */}
-              </div>
-              {/* ----------------------------------- */}
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                    <label className="block text-xs font-bold text-slate-500 mb-1">Bulan</label>
-                    <select 
-                      className="w-full border p-2 rounded-lg"
-                      value={generateForm.bulan}
-                      onChange={(e) => setGenerateForm({...generateForm, bulan: e.target.value})}
-                    >
-                    {[...Array(12)].map((_, i) => (
-                        <option key={i} value={i+1}>{new Date(0, i).toLocaleString('id-ID', {month:'long'})}</option>
-                    ))}
-                    </select>
-                </div>
-                <div>
-                    <label className="block text-xs font-bold text-slate-500 mb-1">Tahun</label>
-                    <input 
-                      type="number" 
-                      className="w-full border p-2 rounded-lg"
-                      value={generateForm.tahun}
-                      onChange={(e) => setGenerateForm({...generateForm, tahun: e.target.value})}
-                    />
-                </div>
-              </div>
-              
               <div>
-                <label className="block text-xs font-bold text-slate-500 mb-1">Nominal (Rp)</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Nama Periode</label>
                 <input 
-                  type="number" 
-                  className="w-full border p-2 rounded-lg"
-                  value={generateForm.jumlah}
-                  onChange={(e) => setGenerateForm({...generateForm, jumlah: e.target.value})}
+                  type="text" 
+                  required
+                  placeholder="Contoh: Maret 2026"
+                  className="w-full border rounded-lg p-2 focus:ring-2 focus:ring-indigo-500"
+                  value={formData.nama_periode}
+                  onChange={e => setFormData({...formData, nama_periode: e.target.value})}
                 />
               </div>
 
-              <button type="submit" className="w-full bg-indigo-600 text-white py-2.5 rounded-lg font-bold hover:bg-indigo-700 mt-2">
-               Buat Tagihan
-              </button>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Bulan (Angka)</label>
+                  <input 
+                    type="number" min="1" max="12" required
+                    className="w-full border rounded-lg p-2"
+                    value={formData.bulan}
+                    onChange={e => setFormData({...formData, bulan: e.target.value})}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Tahun</label>
+                  <input 
+                    type="number" min="2024" required
+                    className="w-full border rounded-lg p-2"
+                    value={formData.tahun}
+                    onChange={e => setFormData({...formData, tahun: e.target.value})}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Jumlah Tagihan (Rp)</label>
+                <input 
+                  type="number" required
+                  placeholder="150000"
+                  className="w-full border rounded-lg p-2"
+                  value={formData.jumlah_tagihan}
+                  onChange={e => setFormData({...formData, jumlah_tagihan: e.target.value})}
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Kategori</label>
+                <select 
+                  className="w-full border rounded-lg p-2 bg-white"
+                  value={formData.id_kategori}
+                  onChange={e => setFormData({...formData, id_kategori: e.target.value})}
+                >
+                  {categories.length > 0 ? (
+                    categories.map(cat => (
+                      <option key={cat.id} value={cat.id}>{cat.nama}</option>
+                    ))
+                  ) : (
+                    <option value="1">IPL (Default)</option>
+                  )}
+                </select>
+              </div>
+
+              <div className="pt-4">
+                <button 
+                  type="submit" 
+                  disabled={loadingGen}
+                  className="w-full bg-indigo-600 text-white py-2.5 rounded-lg font-bold hover:bg-indigo-700 disabled:bg-indigo-300 transition"
+                >
+                  {loadingGen ? 'Sedang Memproses...' : 'Generate Tagihan Massal'}
+                </button>
+              </div>
+
             </form>
           </div>
         </div>
       )}
+
     </div>
   );
 }

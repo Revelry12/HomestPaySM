@@ -43,6 +43,7 @@ export const loginWarga = async (req, res) => {
     res.json({
       success: true,
       data: {
+        id: userData.id_user,
         nama: userData.nama,
         nohp: userData.nohp,
         blok: userData.blok_rumah || "-",

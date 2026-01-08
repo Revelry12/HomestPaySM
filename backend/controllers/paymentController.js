@@ -1,93 +1,85 @@
 import db from "../config/db.js";
 
-// ---------------------------------------------------------
-// 1. FITUR BAYAR MANUAL (Dipakai Admin saat klik tombol "Bayar Sekarang")
-// ---------------------------------------------------------
-export const payBill = async (req, res) => {
-  const { id_tagihan } = req.body;
-  // Kita abaikan metode_bayar dulu karena kolomnya blm ada di DB
-
-  const connection = await db.getConnection();
-  try {
-    await connection.beginTransaction();
-
-    // A. Cari Info Tagihan
-    const [bill] = await connection.query(
-      "SELECT jumlah FROM tagihan WHERE id = ?",
-      [id_tagihan]
-    );
-    if (bill.length === 0) {
-      throw new Error("Tagihan tidak ditemukan!");
-    }
-    const nominal = bill[0].jumlah;
-
-    // B. Update Status Tagihan Utama jadi 'Lunas'
-    await connection.query("UPDATE tagihan SET status = 'Lunas' WHERE id = ?", [
-      id_tagihan,
-    ]);
-
-    // C. Catat ke Tabel Pembayaran (Arsip)
-    await connection.query(
-      `INSERT INTO pembayaran (id_tagihan, jumlah, waktu_pembayaran, status) 
-       VALUES (?, ?, NOW(), 'Lunas')`,
-      [id_tagihan, nominal]
-    );
-
-    await connection.commit();
-    res.json({ message: "Pembayaran Manual Berhasil! Status Lunas." });
-  } catch (error) {
-    await connection.rollback();
-    console.error("Error Payment:", error);
-    res.status(500).json({ error: error.message });
-  } finally {
-    connection.release();
-  }
-};
-
-// ---------------------------------------------------------
-// 2. FITUR BAYAR OTOMATIS (Webhook / Callback dari Bank/Simulasi)
-// ---------------------------------------------------------
-export const receivePaymentCallback = async (req, res) => {
+export const paymentCallback = async (req, res) => {
   const { nomor_va, jumlah_bayar } = req.body;
 
-  const connection = await db.getConnection();
+  console.log("------------------------------------------------");
+  console.log("💰 [PAYMENT] Request Masuk:", nomor_va);
+
   try {
-    await connection.beginTransaction();
+    // 1. Parsing ID Rumah
+    const idRumahString = nomor_va.slice(-4);
+    const idRumah = parseInt(idRumahString);
 
-    // A. Cari Tagihan Berdasarkan Nomor VA
-    const [bills] = await connection.query(
-      "SELECT id, jumlah, status FROM tagihan WHERE nomor_va = ?",
-      [nomor_va]
-    );
-
-    if (bills.length === 0) {
-      throw new Error("Nomor VA tidak ditemukan di sistem!");
-    }
-    const tagihan = bills[0];
-
-    // Cek apakah sudah lunas?
-    if (tagihan.status === "Lunas") {
-      return res.json({ message: "Tagihan ini sudah lunas sebelumnya." });
+    if (isNaN(idRumah)) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Format VA Salah" });
     }
 
-    // B. Update Status Tagihan Jadi Lunas
-    await connection.query("UPDATE tagihan SET status = 'Lunas' WHERE id = ?", [
-      tagihan.id,
-    ]);
+    console.log("🏠 [PAYMENT] Target Rumah ID:", idRumah);
 
-    // C. Catat di Tabel Pembayaran
-    await connection.query(
-      `INSERT INTO pembayaran (id_tagihan, jumlah, waktu_pembayaran, status, nomor_va) 
-       VALUES (?, ?, NOW(), 'Lunas', ?)`,
-      [tagihan.id, jumlah_bayar, nomor_va]
+    // 2. Cari Tagihan (Gunakan Alias 'id_tagihan' biar tidak tertukar!)
+    const [tagihan] = await db.query(
+      `SELECT t.id as id_tagihan, t.jumlah, t.status, p.nama as nama_periode 
+             FROM tagihan t
+             JOIN periode_penagihan p ON t.id_periode = p.id
+             WHERE t.id_rumah = ? AND t.status != 'Lunas' 
+             ORDER BY t.id ASC LIMIT 1`,
+      [idRumah]
     );
 
-    await connection.commit();
-    res.json({ success: true, message: "Pembayaran Otomatis Diterima." });
+    if (tagihan.length === 0) {
+      console.log("⚠️ [PAYMENT] Tidak ada tagihan unpaid untuk rumah ini.");
+      return res
+        .status(404)
+        .json({
+          success: false,
+          message: "Tagihan sudah lunas / tidak ditemukan",
+        });
+    }
+
+    const bill = tagihan[0];
+    console.log(
+      "🧾 [PAYMENT] Ditemukan Tagihan ID:",
+      bill.id_tagihan,
+      "| Nominal:",
+      bill.jumlah
+    );
+
+    // 3. Eksekusi Pembayaran
+    // Hapus 'updated_at' dulu biar aman
+    const [updateResult] = await db.query(
+      "UPDATE tagihan SET status = 'Lunas', jumlah_terbayar = ? WHERE id = ?",
+      [bill.jumlah, bill.id_tagihan]
+    );
+
+    console.log("✅ [PAYMENT] Hasil Update:", updateResult);
+
+    if (updateResult.affectedRows === 0) {
+      throw new Error("Query jalan tapi data tidak berubah! Cek ID Tagihan.");
+    }
+
+    // 4. Kirim Respon Sukses
+    const refNo = "TRX" + Date.now().toString().slice(-8);
+    const tanggalBayar = new Date().toLocaleString("id-ID");
+
+    res.json({
+      success: true,
+      message: "Pembayaran Berhasil!",
+      transactionDetails: {
+        referensi: refNo,
+        waktu: tanggalBayar,
+        va: nomor_va,
+        nominal: bill.jumlah,
+        periode: bill.nama_periode,
+        status: "LUNAS",
+      },
+    });
   } catch (error) {
-    await connection.rollback();
-    res.status(400).json({ success: false, error: error.message });
-  } finally {
-    connection.release();
+    console.error("❌ [PAYMENT ERROR]:", error);
+    res
+      .status(500)
+      .json({ success: false, message: "Server Error: " + error.message });
   }
 };

@@ -10,8 +10,9 @@ import houseRoutes from "./routes/houseRoutes.js";
 import paymentRoutes from "./routes/paymentRoutes.js";
 import mobileRoutes from "./routes/mobileRoutes.js";
 import dashboardRoutes from "./routes/dashboardRoutes.js";
-import financeroutes from "./routes/financeRoutes.js";
-
+import financeRoutes from "./routes/financeRoutes.js";
+import wargaRoutes from "./routes/wargaRoutes.js";
+import rumahRoutes from "./routes/rumahRoutes.js";
 const app = express();
 const port = 3000;
 
@@ -24,8 +25,10 @@ app.use("/api/tagihan", billRoutes);
 app.use("/api/rumah", houseRoutes);
 app.use("/api/pembayaran", paymentRoutes);
 app.use("/api/mobile", mobileRoutes);
-app.use("/api/dashboard", dashboardRoutes);
-app.use("/api/finance", financeroutes);
+app.use("/api/warga", dashboardRoutes);
+app.use("/api/finance", financeRoutes);
+app.use("/api/warga", wargaRoutes);
+app.use("/api/rumah", rumahRoutes);
 // Khusus untuk Kategori, kita "titip" jalurnya di billRoutes saja agar hemat file,
 // atau panggil lewat /api/tagihan/categories
 

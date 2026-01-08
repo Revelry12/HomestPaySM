@@ -1,8 +1,10 @@
 import express from "express";
-import { getDashboardStats } from "../controllers/dashboardController.js";
+// PASTIKAN IMPORT DARI SINI:
+import { getDashboardData } from "../controllers/dashboardController.js";
 
 const router = express.Router();
 
-router.get("/stats", getDashboardStats);
+// PASTIKAN ROUTE-NYA BENAR:
+router.get("/stats/:id_user", getDashboardData);
 
 export default router;
