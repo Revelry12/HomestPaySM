@@ -45,7 +45,7 @@ export const addWarga = async (req, res) => {
 
     // B. Masukkan ke Rumah
     await connection.query(
-      "INSERT INTO penghuni_rumah (id_rumah, id_pengguna, status_penghuni, aktif) VALUES (?, ?, ?, 1)",
+      "INSERT INTO penghuni_rumah (id_rumah, id_pengguna, kuasa, aktif) VALUES (?, ?, ?, 1)",
       [id_rumah, newUserId, status_penghuni || "Tetap"]
     );
 

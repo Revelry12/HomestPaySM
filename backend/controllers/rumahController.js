@@ -5,9 +5,9 @@ import db from "../config/db.js";
 // ==================================================================
 export const getHouses = async (req, res) => {
   try {
-    const [rows] = await db.query(
-      "SELECT * FROM rumah ORDER BY blok_rumah, no_rumah"
-    );
+   // Di file router/controller backend Anda
+// Query ini memastikan hanya rumah dengan status 'Kosong' yang dikirim ke Frontend
+const [rows] = await db.query("SELECT id, blok_rumah, no_rumah FROM rumah WHERE status = 'Kosong' ORDER BY blok_rumah, no_rumah");
     res.json(rows);
   } catch (error) {
     res.status(500).json({ error: error.message });

@@ -11,22 +11,32 @@ export default function ModalTambahWarga({ onClose, onSuccess }) {
     nohp: '',
     password: '123', // Default password
     id_rumah: '',    // PENTING: ID Rumah dari Dropdown
-    status_penghuni: 'Tetap'
+    kuasa: 'Tetap'
   });
 
   // 1. Ambil Data Rumah Kosong saat Modal Dibuka
+// 1. Ambil Data Rumah Kosong saat Modal Dibuka
   useEffect(() => {
+    let isMounted = true; // Pengaman untuk menghindari memory leak
+
     const fetchHouses = async () => {
       try {
-        const res = await fetch('http://localhost:3000/api/rumah/available');
+        // Tambahkan timestamp atau cache-breaker jika perlu agar browser tidak ambil data lama
+        const res = await fetch('http://localhost:3000/api/rumah/available?t=' + Date.now());
         const data = await res.json();
-        setEmptyHouses(Array.isArray(data) ? data : []);
+        
+        if (isMounted) {
+          setEmptyHouses(Array.isArray(data) ? data : []);
+        }
       } catch (err) {
         console.error("Gagal load rumah kosong:", err);
       }
     };
+
     fetchHouses();
-  }, []);
+    
+    return () => { isMounted = false; };
+  }, []); // [] berarti dijalankan 1x setiap modal ini di-mount (muncul)
 
   // 2. Handle Submit Form
   const handleSubmit = async (e) => {
@@ -127,7 +137,7 @@ export default function ModalTambahWarga({ onClose, onSuccess }) {
             <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Status Kepemilikan</label>
             <select 
               className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
-              onChange={e => setFormData({...formData, status_penghuni: e.target.value})}
+              onChange={e => setFormData({...formData, kuasa: e.target.value})}
             >
                <option value="Tetap">Pemilik Tetap</option>
                <option value="Penyewa">Penyewa / Kontrak</option>
