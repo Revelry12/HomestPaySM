@@ -73,3 +73,43 @@ export const getDashboardData = async (req, res) => {
     res.status(500).json({ error: "Gagal memuat dashboard." });
   }
 };
+
+export const getAdminStats = async (req, res) => {
+  try {
+    // 1. Total Uang Masuk (Tagihan Lunas)
+    // Asumsi: jumlah_terbayar diisi saat lunas. Jika null, gunakan 0.
+    const queryIncome = `
+      SELECT SUM(jumlah_terbayar) as total 
+      FROM tagihan 
+      WHERE status = 'Lunas'
+    `;
+    const [incomeRows] = await db.query(queryIncome);
+
+    // 2. Tunggakan (Tagihan Belum Lunas)
+    const queryPending = `
+      SELECT SUM(jumlah) as total 
+      FROM tagihan 
+      WHERE status != 'Lunas'
+    `;
+    const [pendingRows] = await db.query(queryPending);
+
+    // 3. Rumah Terisi (Penghuni Aktif)
+    // Hitung unique id_rumah yang punya penghuni aktif
+    const queryOccupied = `
+      SELECT COUNT(DISTINCT id_rumah) as total 
+      FROM penghuni_rumah 
+      WHERE aktif = 1
+    `;
+    const [occupiedRows] = await db.query(queryOccupied);
+
+    res.json({
+      income: parseInt(incomeRows[0].total) || 0,
+      pending: parseInt(pendingRows[0].total) || 0,
+      occupied: parseInt(occupiedRows[0].total) || 0
+    });
+
+  } catch (error) {
+    console.error("❌ Error Admin Dashboard:", error);
+    res.status(500).json({ error: "Gagal memuat data admin." });
+  }
+};

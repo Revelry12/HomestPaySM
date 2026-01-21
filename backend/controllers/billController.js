@@ -256,3 +256,41 @@ console.log("👉 ID Pengguna yang diminta:", id_pengguna);
     res.status(500).json({ error: error.message });
   }
 };
+
+// ============================================================================
+// 7. GET DETAIL TAGIHAN (Untuk Invoice)
+// ============================================================================
+export const getBillDetail = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const query = `
+      SELECT 
+        t.id, 
+        t.jumlah, 
+        t.status, 
+        t.created_at,
+        r.blok_rumah, 
+        r.no_rumah, 
+        p.nama AS nama_warga,
+        per.nama AS bulan
+      FROM tagihan t
+      JOIN rumah r ON t.id_rumah = r.id
+      JOIN penghuni_rumah pr ON r.id = pr.id_rumah AND pr.aktif = 1
+      JOIN pengguna p ON pr.id_pengguna = p.id
+      JOIN periode_penagihan per ON t.id_periode = per.id
+      WHERE t.id = ?
+    `;
+
+    const [rows] = await db.query(query, [id]);
+
+    if(rows.length === 0) return res.status(404).json({error: "Tagihan tidak ditemukan"});
+
+    const data = rows[0];
+    // Tambah field tahun manual
+    data.tahun = new Date(data.created_at).getFullYear();
+
+    res.json(data);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};

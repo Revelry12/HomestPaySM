@@ -25,7 +25,7 @@ app.use("/api/tagihan", billRoutes);
 app.use("/api/rumah", houseRoutes);
 app.use("/api/pembayaran", paymentRoutes);
 app.use("/api/mobile", mobileRoutes);
-app.use("/api/warga", dashboardRoutes);
+app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/finance", financeRoutes);
 app.use("/api/warga", wargaRoutes);
 app.use("/api/rumah", rumahRoutes);
